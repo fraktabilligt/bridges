@@ -1,23 +1,20 @@
 <?php
-  ob_start();
-  
-  ini_set('display_errors', 'On');
   
 // Configuration
   $name = 'Fraktabilligt Generic Bridge';
-  $version = '1.0'; // API Version
-  $username = 'foo'; // HTTP Auth Username
-  $password = 'bar'; // HTTP Auth Password
-  $client_secret = ''; // Fraktabilligt Client Secret
-  $mysql_hostname = '';
-  $mysql_user = '';
-  $mysql_password = '';
-  $mysql_database = '';
+  $version = '1.0';
+  $username = 'foo';
+  $password = 'bar';
+  $secret_key = '0123456789abcdef0123456789abcdef';
+  $mysql_hostname = DB_SERVER;
+  $mysql_user = DB_USERNAME;
+  $mysql_password = DB_PASSWORD;
+  $mysql_database = DB_DATABASE;
   
 // Initiate HTTP Auth Digest Protection
   if (empty($_SERVER['PHP_AUTH_DIGEST'])) {
     header('HTTP/1.1 401 Unauthorized');
-    header('WWW-Authenticate: Digest realm="'.$name.'", qop="auth", nonce="'.uniqid().'", opaque="'.md5($name).'"');
+    header('WWW-Authenticate: Digest realm="'. $name .'", qop="auth", nonce="'.uniqid().'", opaque="'.md5($name).'"');
     die('Authorization Required');
   }
   
@@ -29,7 +26,7 @@
     if (strpos(strtolower($_SERVER['HTTP_AUTHORIZATION']), 'digest') === 0) $digest = substr($_SERVER['HTTP_AUTHORIZATION'], 7);
   }
   
-// Parse the digest string
+// Parse the digest_string
   $parameters = array('nonce' => 1, 'nc' => 1, 'cnonce' => 1, 'qop' => 1, 'username' => 1, 'uri' => 1, 'response' => 1);
   
   preg_match_all('@('.implode('|', array_keys($parameters)).')=(?:([\'"])([^\2]+?)\2|([^\s,]+))@', $digest, $matches, PREG_SET_ORDER);
@@ -41,7 +38,7 @@
   }
   $data = $parameters ? false : $data;
   
-// Validate the digest checksum
+// Generate the valid checksum
   $checksum = md5(md5($username.':'.$name.':'.$password).':'.$data['nonce'].':'.$data['nc'].':'.$data['cnonce'].':'.$data['qop'].':'.md5($_SERVER['REQUEST_METHOD'].':'.$data['uri']));
   
   if ($data['response'] != $checksum) {
@@ -53,25 +50,25 @@
   $mysqli = new mysqli($mysql_hostname, $mysql_user, $mysql_password, $mysql_database);
   
   if ($mysqli->connect_errno) trigger_error('Connection to MySQL database failed: ' . $mysqli->connect_error, E_USER_ERROR);
-    
-  switch($_GET['action']) {
+  
+  switch(@$_GET['action']) {
     
   // Return list of orders
     case 'list':
     
       $output = array();
       
-      if ($result = $mysqli->query("SELECT * FROM tblOrders WHERE order_status_id = 'x';")) {
+      if ($result = $mysqli->query("SELECT * FROM ". DB_TABLE_ORDERS .";")) {
         
         while ($row = $result->fetch_assoc()) {
           
           $output[] = array(
-            'reference'     => $row['order_id'],
+            'reference'     => $row['id'],
             'name'          => $row['customer_company'] ? $row['customer_company'] : $row['customer_firstname'].' '.$row['customer_lastname'],
-            'destination'   => $row['country_code'].'-'.$row['postcode'].' '.$row['city'],
-            'total_value'   => $row['order_total'],
+            'destination'   => $row['customer_country_code'].'-'.$row['customer_postcode'].' '.$row['customer_city'],
+            'total_value'   => $row['payment_due'],
             'currency_code' => $row['currency_code'],
-            'total_weight'  => $row['total_weight'],
+            'total_weight'  => $row['weight_total'],
             'weight_class'  => $row['weight_class'],
             'custom'        => '',
             'date'          => date('Y-m-d H:i:s', strtotime($row['date_created'])),
@@ -88,12 +85,12 @@
     
       $output = array();
       
-      if ($result = $mysqli->query("SELECT * FROM tblOrders WHERE order_id = '". $mysqli->real_escape_string($_GET['reference']) ."' LIMIT 1")) {
+      if ($result = $mysqli->query("SELECT * FROM ". DB_TABLE_ORDERS ." WHERE id = '". $mysqli->real_escape_string($_GET['reference']) ."' LIMIT 1")) {
         
         while ($row = $result->fetch_assoc()) {
           
           $output = array(
-            'reference' => $row['order_id'],
+            'reference' => $row['id'],
             //'consigner' => array(
             //  'type'         => 'company',
             //  'name'         => '...',
@@ -115,11 +112,10 @@
               'phone'        => $row['customer_phone'],
             ),
             'consignment' => array(
-              'value' => (float)$row['order_total'],
+              'value' => (float)$row['payment_due'],
               'currency_code' => $row['currency_code'],
               'shipments' => array(
                 array('weight' => 0, 'weight_class' => 'kg', 'length' => 0, 'width' => 0, 'height' => 0, 'length_class' => 'cm'),
-                //array('weight' => 0, 'weight_class' => 'kg', 'length' => 0, 'width' => 0, 'height' => 0, 'length_class' => 'cm'),
               ),
             ),
           );
@@ -137,6 +133,10 @@
       // ...
       
       break;
+      
+    default:
+      header('HTTP/1.1 400 Bad Request');
+      die('No action');
   }
   
   if (version_compare(PHP_VERSION, '5.4', '>=')) {
@@ -152,7 +152,7 @@
   
   header('HTTP/1.1 200 OK');
   header('Version: '.$version);
-  header('Checksum: '.sha1($client_secret . $output));
+  header('Checksum: '.sha1($secret_key . $output));
   header('Content-Type: application/json; charset=utf-8');
   header('Content-Length: '.strlen($output));
   die($output);
