@@ -58,7 +58,7 @@
     
       $output = array();
       
-      if ($result = $mysqli->query("SELECT * FROM ". DB_TABLE_ORDERS .";")) {
+      if ($result = $mysqli->query("SELECT * FROM ". DB_TABLE_ORDERS ." ORDER BY date_created DESC;")) {
         
         while ($row = $result->fetch_assoc()) {
           
@@ -85,7 +85,7 @@
     
       $output = array();
       
-      if ($result = $mysqli->query("SELECT * FROM ". DB_TABLE_ORDERS ." WHERE id = '". $mysqli->real_escape_string($_GET['reference']) ."' LIMIT 1")) {
+      if ($result = $mysqli->query("SELECT * FROM ". DB_TABLE_ORDERS ." WHERE id = '". $mysqli->real_escape_string($_GET['reference']) ."' AND order_status_id = 'x' LIMIT 1")) {
         
         while ($row = $result->fetch_assoc()) {
           

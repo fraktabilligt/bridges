@@ -1,9 +1,7 @@
 <?php
-  ob_start();
-  
   ini_set('display_errors', 'Off');
-
-
+  
+  ob_start();
   
 // Configuration
   $name = 'Fraktabilligt Generic Bridge';
@@ -11,7 +9,6 @@
   $username = 'foo'; // HTTP Auth Username
   $password = 'bar'; // HTTP Auth Password
   $secret_key = '';
-
   $mysql_hostname = '';
   $mysql_user = '';
   $mysql_password = '';
@@ -64,7 +61,7 @@
     
       $output = array();
       
-      if ($result = $mysqli->query("SELECT * FROM tblOrders WHERE order_status_id = 'x';")) {
+      if ($result = $mysqli->query("SELECT * FROM tblOrders WHERE order_status_id = 'x' ORDER BY date_created DESC")) {
         
         while ($row = $result->fetch_assoc()) {
           
@@ -91,7 +88,7 @@
     
       $output = array();
       
-      if ($result = $mysqli->query("SELECT * FROM tblOrders WHERE order_id = '". $mysqli->real_escape_string($_GET['reference']) ."' LIMIT 1")) {
+      if ($result = $mysqli->query("SELECT * FROM tblOrders WHERE order_id = '". $mysqli->real_escape_string($_GET['reference']) ."' AND order_status_id = 'x' LIMIT 1")) {
         
         while ($row = $result->fetch_assoc()) {
           
