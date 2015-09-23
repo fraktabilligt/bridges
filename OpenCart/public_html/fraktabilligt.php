@@ -1,7 +1,7 @@
 <?php
   ini_set('display_errors', 'On');
-  require_once('includes/configure.php');
-  require_once('includes/database_tables.php');
+  
+  require_once('config.php');
   
 // Configuration
   $name = 'Fraktabilligt Generic Bridge';
@@ -9,9 +9,9 @@
   $username = 'foo';
   $password = 'bar';
   $secret_key = '0123456789abcdef0123456789abcdef';
-  $mysql_hostname = DB_SERVER;
-  $mysql_user = DB_SERVER_USERNAME;
-  $mysql_password = DB_SERVER_PASSWORD;
+  $mysql_hostname = DB_HOSTNAME;
+  $mysql_user = DB_USERNAME;
+  $mysql_password = DB_PASSWORD;
   $mysql_database = DB_DATABASE;
   
 // Initiate HTTP Auth Digest Protection
@@ -63,26 +63,26 @@
       $output = array();
       
       $sql = (
-        "SELECT o.*, ot.`value` as order_total FROM ". TABLE_ORDERS ." o
-        LEFT JOIN ". TABLE_ORDERS_TOTAL ." ot ON (ot.orders_id = o.orders_id and class='ot_total')
-        ORDER BY date_purchased DESC
+        "SELECT o.*, c.`iso_code_2` as shipping_country_code FROM ". DB_PREFIX ."order o
+        LEFT JOIN ". DB_PREFIX ."country c ON (o.shipping_country_id = c.country_id)
+        ORDER BY date_added DESC
         LIMIT 100;"
       );
       
-      if ($result = $mysqli->query($sql)) {
+      if ($result = $mysqli->query($sql) or trigger_error($mysqli->error, E_USER_ERROR)) {
         
         while ($row = $result->fetch_assoc()) {
           
           $output[] = array(
-            'reference'     => $row['orders_id'],
-            'name'          => $row['customers_company'] ? $row['customers_company'] : $row['customers_name'],
-            'destination'   => $row['customers_country'].'-'.$row['customers_postcode'].' '.$row['customers_city'],
-            'total_value'   => $row['order_total'],
-            'currency_code' => $row['currency'],
+            'reference'     => $row['order_id'],
+            'name'          => $row['shipping_company'] ? $row['shipping_company'] : $row['shipping_name'],
+            'destination'   => $row['shipping_country_code'].'-'.$row['shipping_postcode'].' '.$row['shipping_city'],
+            'total_value'   => $row['total'],
+            'currency_code' => $row['currency_code'],
             'total_weight'  => null,
             'weight_class'  => null,
             'custom'        => '',
-            'date'          => date('Y-m-d H:i:s', strtotime($row['date_purchased'])),
+            'date'          => date('Y-m-d H:i:s', strtotime($row['date_added'])),
           );
         }
         
@@ -97,17 +97,18 @@
       $output = array();
       
       $sql = (
-        "SELECT * FROM ". TABLE_ORDERS ."
-        WHERE id = '". $mysqli->real_escape_string($_GET['reference']) ."'
-        AND LIMIT 1"
+        "SELECT o.*, c.`iso_code_2` as shipping_country_code FROM ". DB_PREFIX ."order
+        LEFT JOIN ". DB_PREFIX ."country c ON (o.shipping_country_id = c.country_id)
+        WHERE order_id = '". $mysqli->real_escape_string($_GET['reference']) ."'
+        LIMIT 1"
       );
       
-      if ($result = $mysqli->query($sql)) {
+      if ($result = $mysqli->query($sql) or trigger_error($mysqli->error, E_USER_ERROR)) {
         
         while ($row = $result->fetch_assoc()) {
           
           $output = array(
-            'reference' => $row['orders_id'],
+            'reference' => $row['order_id'],
             //'consigner' => array(
             //  'type'         => 'company',
             //  'name'         => '...',
@@ -119,17 +120,17 @@
             //  'phone'        => '...',
             //),
             'consignee' => array(
-              'type'         => !empty($row['delivery_company']) ? 'company' : 'individual',
-              'name'         => !empty($row['delivery_company']) ? $row['delivery_company'] : $row['delivery_name'],
-              'address1'     => $row['delivery_address1'],
-              'city'         => $row['delivery_city'],
-              'postcode'     => $row['delivery_postcode'],
-              'country_code' => $row['delivery_country'],
-              'contact'      => $row['delivery_name'],
-              'phone'        => $row['customers_telephone'],
+              'type'         => !empty($row['shipping_company']) ? 'company' : 'individual',
+              'name'         => !empty($row['shipping_company']) ? $row['shipping_company'] : $row['shipping_firstname'].' '.$row['shipping_lastname'],
+              'address1'     => $row['shipping_address1'],
+              'city'         => $row['shipping_city'],
+              'postcode'     => $row['shipping_postcode'],
+              'country_code' => $row['shipping_country_code'],
+              'contact'      => $row['shipping_firstname'].' '.$row['shipping_lastname'],
+              'phone'        => $row['telephone'],
             ),
             'consignment' => array(
-              'value' => (float)$row['payment_due'],
+              'value' => (float)$row['total'],
               'currency_code' => $row['currency_code'],
               'shipments' => array(
                 array('weight' => 0, 'weight_class' => 'kg', 'length' => 0, 'width' => 0, 'height' => 0, 'length_class' => 'cm'),
