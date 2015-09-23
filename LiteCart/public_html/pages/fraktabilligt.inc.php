@@ -5,7 +5,7 @@
   $version = '1.0';
   $username = 'foo';
   $password = 'bar';
-  $secret_key = '0123456789abcdef0123456789abcdef';
+  $secret_key = '123456';
   $mysql_hostname = DB_SERVER;
   $mysql_user = DB_USERNAME;
   $mysql_password = DB_PASSWORD;
@@ -58,14 +58,20 @@
     
       $output = array();
       
-      if ($result = $mysqli->query("SELECT * FROM ". DB_TABLE_ORDERS ." ORDER BY date_created DESC;")) {
+      $sql = (
+        "SELECT * FROM ". DB_TABLE_ORDERS ."
+        ORDER BY date_created DESC
+        LIMIT 100"
+      );
+      
+      if ($result = $mysqli->query($sql) or trigger_error($mysqli->error, E_USER_ERROR)) {
         
         while ($row = $result->fetch_assoc()) {
           
           $output[] = array(
             'reference'     => $row['id'],
-            'name'          => $row['customer_company'] ? $row['customer_company'] : $row['customer_firstname'].' '.$row['customer_lastname'],
-            'destination'   => $row['customer_country_code'].'-'.$row['customer_postcode'].' '.$row['customer_city'],
+            'name'          => $row['shipping_company'] ? $row['shipping_company'] : $row['shipping_firstname'].' '.$row['shipping_lastname'],
+            'destination'   => $row['shipping_country_code'].'-'.$row['shipping_postcode'].' '.$row['shipping_city'],
             'total_value'   => $row['payment_due'],
             'currency_code' => $row['currency_code'],
             'total_weight'  => $row['weight_total'],
@@ -85,7 +91,13 @@
     
       $output = array();
       
-      if ($result = $mysqli->query("SELECT * FROM ". DB_TABLE_ORDERS ." WHERE id = '". $mysqli->real_escape_string($_GET['reference']) ."' AND order_status_id = 'x' LIMIT 1")) {
+      $sql = (
+        "SELECT * FROM ". DB_TABLE_ORDERS ."
+        WHERE id = '". $mysqli->real_escape_string($_GET['reference']) ."'
+        LIMIT 1"
+      );
+      
+      if ($result = $mysqli->query($sql) or trigger_error($mysqli->error, E_USER_ERROR)) {
         
         while ($row = $result->fetch_assoc()) {
           
@@ -102,13 +114,13 @@
             //  'phone'        => '...',
             //),
             'consignee' => array(
-              'type'         => !empty($row['company']) ? 'company' : 'individual',
-              'name'         => !empty($row['company']) ? $row['customer_company'] : $row['customer_firstname'].' '.$row['customer_lastname'],
-              'address1'     => $row['customer_address1'],
-              'city'         => $row['customer_city'],
-              'postcode'     => $row['customer_postcode'],
-              'country_code' => $row['customer_country_code'],
-              'contact'      => $row['customer_firstname'].' '.$row['customer_lastname'],
+              'type'         => !empty($row['shipping_company']) ? 'company' : 'individual',
+              'name'         => !empty($row['shipping_company']) ? $row['shipping_company'] : $row['shipping_firstname'].' '.$row['shipping_lastname'],
+              'address1'     => $row['shipping_address1'],
+              'city'         => $row['shipping_city'],
+              'postcode'     => $row['shipping_postcode'],
+              'country_code' => $row['shipping_country_code'],
+              'contact'      => $row['shipping_firstname'].' '.$row['shipping_lastname'],
               'phone'        => $row['customer_phone'],
             ),
             'consignment' => array(
