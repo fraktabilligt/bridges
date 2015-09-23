@@ -97,9 +97,8 @@
       $output = array();
       
       $sql = (
-        "SELECT o.*, ot.`value` as order_total FROM ". TABLE_ORDERS ."
-        LEFT JOIN ". TABLE_ORDERS_TOTAL ." ot ON (ot.orders_id = o.orders_id and class='ot_total')
-        WHERE o.id = '". $mysqli->real_escape_string($_GET['reference']) ."'
+        "SELECT * FROM ". TABLE_ORDERS ."
+        WHERE id = '". $mysqli->real_escape_string($_GET['reference']) ."'
         AND LIMIT 1"
       );
       
