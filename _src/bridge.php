@@ -61,7 +61,13 @@
     
       $output = array();
       
-      if ($result = $mysqli->query("SELECT * FROM tblOrders WHERE order_status_id = 'x' ORDER BY date_created DESC")) {
+      $sql = (
+        "SELECT * FROM tblOrders
+        WHERE order_status_id = 'x'
+        ORDER BY date_created DESC"
+      );
+      
+      if ($result = $mysqli->query($sql) or trigger_error($mysqli->error, E_USER_ERROR)) {
         
         while ($row = $result->fetch_assoc()) {
           
@@ -88,7 +94,14 @@
     
       $output = array();
       
-      if ($result = $mysqli->query("SELECT * FROM tblOrders WHERE order_id = '". $mysqli->real_escape_string($_GET['reference']) ."' AND order_status_id = 'x' LIMIT 1")) {
+      $sql = (
+        "SELECT * FROM tblOrders
+        WHERE order_id = '". $mysqli->real_escape_string($_GET['reference']) ."'
+        AND order_status_id = 'x'
+        LIMIT 1"
+      );
+      
+      if ($result = $mysqli->query($sql) or trigger_error($mysqli->error, E_USER_ERROR)) {
         
         while ($row = $result->fetch_assoc()) {
           
