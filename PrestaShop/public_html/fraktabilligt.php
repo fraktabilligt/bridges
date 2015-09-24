@@ -109,9 +109,25 @@
       $output = array();
       
       $sql = (
-        "SELECT * FROM ". TABLE_ORDERS ."
-        WHERE id = '". $mysqli->real_escape_string($_GET['reference']) ."'
-        AND LIMIT 1"
+        "SELECT
+          o.id_order as order_id,
+          o.total_paid_tax_incl as order_total,
+          c1.iso_code as currency_code,
+          a.company as shipping_company, 
+          a.firstname as shipping_firstname, 
+          a.lastname as shipping_lastname, 
+          a.address1 as shipping_address1, 
+          a.postcode as shipping_postcode, 
+          a.city as shipping_city,
+          c2.iso_code as shipping_country_code,
+          a.phone as shipping_phone,
+          o.date_add as order_date
+        FROM ". _DB_PREFIX_ ."orders o
+        LEFT JOIN ". _DB_PREFIX_ ."currency c1 ON (c1.id_currency = c1.id_currency)
+        LEFT JOIN ". _DB_PREFIX_ ."address a ON (a.id_address = o.id_address_delivery)
+        LEFT JOIN ". _DB_PREFIX_ ."country c2 ON (a.id_country = c2.id_country)
+        WHERE o.id_order = '". $mysqli->real_escape_string($_GET['reference']) ."'
+        LIMIT 1"
       );
       
       if ($result = $mysqli->query($sql) or trigger_error($mysqli->error, E_USER_ERROR)) {
@@ -136,9 +152,9 @@
               'address1'     => $row['shipping_address1'],
               'city'         => $row['shipping_city'],
               'postcode'     => $row['shipping_postcode'],
-              'country_code' => $row['shipping_country'],
+              'country_code' => $row['shipping_country_code'],
               'contact'      =>  $row['shipping_firstname'].' '.$row['shipping_lastname'],
-              'phone'        => $row['customers_telephone'],
+              'phone'        => $row['shipping_phone'],
             ),
             'consignment' => array(
               'value' => (float)$row['order_total'],

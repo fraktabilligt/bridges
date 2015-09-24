@@ -97,9 +97,15 @@
       $output = array();
       
       $sql = (
-        "SELECT * FROM ". TABLE_ORDERS ."
-        WHERE id = '". $mysqli->real_escape_string($_GET['reference']) ."'
-        AND LIMIT 1"
+        "SELECT
+          o.*,
+          ot.`value` as order_total,
+          c.countries_iso_code_2 as delivery_country_code
+        FROM ". TABLE_ORDERS ." o
+        LEFT JOIN ". TABLE_ORDERS_TOTAL ." ot ON (ot.orders_id = o.orders_id and class='ot_total')
+        LEFT JOIN ". TABLE_COUNTRIES ." c ON (c.countries_name = o.delivery_country)
+        WHERE o.orders_id = '". $mysqli->real_escape_string($_GET['reference']) ."'
+        LIMIT 1"
       );
       
       if ($result = $mysqli->query($sql) or trigger_error($mysqli->error, E_USER_ERROR)) {
@@ -124,13 +130,13 @@
               'address1'     => $row['delivery_address1'],
               'city'         => $row['delivery_city'],
               'postcode'     => $row['delivery_postcode'],
-              'country_code' => $row['delivery_country'],
+              'country_code' => $row['delivery_country_code'],
               'contact'      => $row['delivery_name'],
               'phone'        => $row['customers_telephone'],
             ),
             'consignment' => array(
               'value' => (float)$row['payment_due'],
-              'currency_code' => $row['currency_code'],
+              'currency_code' => $row['currency'],
               'shipments' => array(
                 array('weight' => 0, 'weight_class' => 'kg', 'length' => 0, 'width' => 0, 'height' => 0, 'length_class' => 'cm'),
               ),

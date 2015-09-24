@@ -97,9 +97,9 @@
       $output = array();
       
       $sql = (
-        "SELECT o.*, c.`iso_code_2` as shipping_country_code FROM ". DB_PREFIX ."order
+        "SELECT o.*, c.`iso_code_2` as shipping_country_code FROM ". DB_PREFIX ."order o
         LEFT JOIN ". DB_PREFIX ."country c ON (o.shipping_country_id = c.country_id)
-        WHERE order_id = '". $mysqli->real_escape_string($_GET['reference']) ."'
+        WHERE o.order_id = '". $mysqli->real_escape_string($_GET['reference']) ."'
         LIMIT 1"
       );
       
@@ -122,7 +122,7 @@
             'consignee' => array(
               'type'         => !empty($row['shipping_company']) ? 'company' : 'individual',
               'name'         => !empty($row['shipping_company']) ? $row['shipping_company'] : $row['shipping_firstname'].' '.$row['shipping_lastname'],
-              'address1'     => $row['shipping_address1'],
+              'address1'     => $row['shipping_address_1'],
               'city'         => $row['shipping_city'],
               'postcode'     => $row['shipping_postcode'],
               'country_code' => $row['shipping_country_code'],
