@@ -13,6 +13,9 @@
   $mysql_password = _DB_PASSWD_;
   $mysql_database = _DB_NAME_;
   
+// Set timezone (PHP 5.3+)
+  if (!ini_get('date.timezone')) ini_set('date.timezone', 'Europe/Stockholm');
+  
 // Initiate HTTP Auth Digest Protection
   if (empty($_SERVER['PHP_AUTH_DIGEST'])) {
     header('HTTP/1.1 401 Unauthorized');
