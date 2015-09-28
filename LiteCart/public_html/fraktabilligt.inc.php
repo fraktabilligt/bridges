@@ -1,5 +1,9 @@
 <?php
   
+  ob_start();
+  
+  include('includes/config.inc.php');
+  
 // Configuration
   $name = 'Fraktabilligt Generic Bridge';
   $version = '1.0';
