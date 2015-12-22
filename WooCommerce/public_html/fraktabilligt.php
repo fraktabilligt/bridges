@@ -94,12 +94,17 @@
       if ($result = $mysqli->query($sql) or trigger_error($mysqli->error, E_USER_ERROR)) {
         
         while ($row = $result->fetch_assoc()) {
+          if (count(explode($delimiter, $row['keys'])) != count(explode($delimiter, $row['values']))) {
+            trigger_error('Inconsistent amount of meta titles and values for order '. $row['order_id'], E_USER_WARNING);
+            continue;
+          }
+          
           $row = array_merge($row, array_combine(explode($delimiter, $row['keys']), explode($delimiter, $row['values'])));
           
           $output[] = array(
             'reference'     => $row['order_id'],
             'name'          => $row['_shipping_company'] ? $row['_shipping_company'] : $row['_shipping_first_name'].' '.$row['_shipping_last_name'],
-            'destination'   => $row['_shipping_country'].'-'.$row['_shipping_postcode'].' '.$row['_shipping_city'],
+            'destination'   => (!empty($row['_shipping_country']) ? $row['_shipping_country'].'-' : '') . $row['_shipping_postcode'].' '.$row['_shipping_city'],
             'total_value'   => $row['_order_total'],
             'currency_code' => $row['_order_currency'],
             'total_weight'  => null,
