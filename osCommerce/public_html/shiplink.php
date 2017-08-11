@@ -1,18 +1,18 @@
 <?php
   ini_set('display_errors', 'On');
-  $config = simplexml_load_file('app/etc/local.xml');
+  require_once('includes/configure.php');
+  require_once('includes/database_tables.php');
   
 // Configuration
-  $name = 'Fraktabilligt Generic Bridge';
+  $name = 'Shiplink Generic Bridge';
   $version = '1.0';
   $username = 'foo';
   $password = 'bar';
   $secret_key = '0123456789abcdef0123456789abcdef';
-  $mysql_hostname     = $config->global->resources->default_setup->connection->host;
-  $mysql_user         = $config->global->resources->default_setup->connection->username;
-  $mysql_password     = $config->global->resources->default_setup->connection->password;
-  $mysql_database     = $config->global->resources->default_setup->connection->dbname;
-  $mysql_table_prefix = $config->global->resources->db->table_prefix;
+  $mysql_hostname = DB_SERVER;
+  $mysql_user = DB_SERVER_USERNAME;
+  $mysql_password = DB_SERVER_PASSWORD;
+  $mysql_database = DB_DATABASE;
   
 // Set timezone (PHP 5.3+)
   if (!ini_get('date.timezone')) ini_set('date.timezone', 'Europe/Stockholm');
@@ -66,20 +66,9 @@
       $output = array();
       
       $sql = (
-        "SELECT
-          o.entity_id as order_id,
-          o.base_grand_total as order_total,
-          o.base_currency_code as currency_code,
-          a.company as shipping_company, 
-          concat(a.firstname, ' ', a.lastname) as shipping_name, 
-          a.lastname as shipping_lastname, 
-          a.postcode as shipping_postcode, 
-          a.city as shipping_city,
-          a.country_id as shipping_country_code,
-          o.created_at as order_date
-        FROM ". $mysqli->real_escape_string($mysql_table_prefix) ."sales_flat_order o
-        LEFT JOIN ". $mysqli->real_escape_string($mysql_table_prefix) ."sales_flat_order_address a ON (a.entity_id = o.shipping_address_id)
-        ORDER BY o.created_at DESC
+        "SELECT o.*, ot.`value` as order_total FROM ". TABLE_ORDERS ." o
+        LEFT JOIN ". TABLE_ORDERS_TOTAL ." ot ON (ot.orders_id = o.orders_id and class='ot_total')
+        ORDER BY date_purchased DESC
         LIMIT 100;"
       );
       
@@ -88,15 +77,15 @@
         while ($row = $result->fetch_assoc()) {
           
           $output[] = array(
-            'reference'     => $row['order_id'],
-            'name'          => $row['shipping_company'] ? $row['shipping_company'] : $row['shipping_name'],
-            'destination'   => $row['shipping_country_code'].'-'.$row['shipping_postcode'].' '.$row['shipping_city'],
+            'reference'     => $row['orders_id'],
+            'name'          => $row['customers_company'] ? $row['customers_company'] : $row['customers_name'],
+            'destination'   => $row['customers_country'].'-'.$row['customers_postcode'].' '.$row['customers_city'],
             'total_value'   => $row['order_total'],
-            'currency_code' => $row['currency_code'],
+            'currency_code' => $row['currency'],
             'total_weight'  => null,
             'weight_class'  => null,
             'custom'        => '',
-            'date'          => date('Y-m-d H:i:s', strtotime($row['order_date'])),
+            'date'          => date('Y-m-d H:i:s', strtotime($row['date_purchased'])),
           );
         }
         
@@ -112,21 +101,13 @@
       
       $sql = (
         "SELECT
-          o.entity_id as order_id,
-          o.base_grand_total as order_total,
-          o.base_currency_code as currency_code,
-          a.company as shipping_company, 
-          concat(a.firstname, ' ', a.lastname) as shipping_name, 
-          a.lastname as shipping_lastname, 
-          a.street as shipping_address1, 
-          a.postcode as shipping_postcode, 
-          a.city as shipping_city,
-          a.country_id as shipping_country_code,
-          a.telephone as shipping_phone,
-          o.created_at as order_date
-        FROM ". $mysqli->real_escape_string($mysql_table_prefix) ."sales_flat_order o
-        LEFT JOIN ". $mysqli->real_escape_string($mysql_table_prefix) ."sales_flat_order_address a ON (a.entity_id = o.shipping_address_id)
-        WHERE o.entity_id = '". $mysqli->real_escape_string($_GET['reference']) ."'
+          o.*,
+          ot.`value` as order_total,
+          c.countries_iso_code_2 as delivery_country_code
+        FROM ". TABLE_ORDERS ." o
+        LEFT JOIN ". TABLE_ORDERS_TOTAL ." ot ON (ot.orders_id = o.orders_id and class='ot_total')
+        LEFT JOIN ". TABLE_COUNTRIES ." c ON (c.countries_name = o.delivery_country)
+        WHERE o.orders_id = '". $mysqli->real_escape_string($_GET['reference']) ."'
         LIMIT 1"
       );
       
@@ -135,7 +116,7 @@
         while ($row = $result->fetch_assoc()) {
           
           $output = array(
-            'reference' => $row['order_id'],
+            'reference' => $row['orders_id'],
             //'consigner' => array(
             //  'type'         => 'company',
             //  'name'         => '...',
@@ -147,18 +128,18 @@
             //  'phone'        => '...',
             //),
             'consignee' => array(
-              'type'         => !empty($row['shipping_company']) ? 'company' : 'individual',
-              'name'         => !empty($row['shipping_company']) ? $row['shipping_company'] :  $row['shipping_name'],
-              'address1'     => $row['shipping_address1'],
-              'city'         => $row['shipping_city'],
-              'postcode'     => $row['shipping_postcode'],
-              'country_code' => $row['shipping_country_code'],
-              'contact'      =>  $row['shipping_name'],
-              'phone'        => $row['shipping_phone'],
+              'type'         => !empty($row['delivery_company']) ? 'company' : 'individual',
+              'name'         => !empty($row['delivery_company']) ? $row['delivery_company'] : $row['delivery_name'],
+              'address1'     => $row['delivery_address1'],
+              'city'         => $row['delivery_city'],
+              'postcode'     => $row['delivery_postcode'],
+              'country_code' => $row['delivery_country_code'],
+              'contact'      => $row['delivery_name'],
+              'phone'        => $row['customers_telephone'],
             ),
             'consignment' => array(
-              'value' => (float)$row['order_total'],
-              'currency_code' => $row['currency_code'],
+              'value' => (float)$row['payment_due'],
+              'currency_code' => $row['currency'],
               'shipments' => array(
                 array('weight' => 0, 'weight_class' => 'kg', 'length' => 0, 'width' => 0, 'height' => 0, 'length_class' => 'cm'),
               ),

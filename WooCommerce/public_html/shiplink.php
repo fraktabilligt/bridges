@@ -1,18 +1,26 @@
 <?php
   ini_set('display_errors', 'On');
   
-  require_once('config.php');
+// WordPress corrupts the HTTP Auth Digest protection so we cannot include() the configuration.
+  $config = file_get_contents('wp-config.php');
+  $matches = array();
+  preg_match('#define\(\'DB_HOST\',\s+\'(.*)\'\);#m', $config, $matches['DB_HOST']);
+  preg_match('#define\(\'DB_USER\',\s+\'(.*)\'\);#m', $config, $matches['DB_USER']);
+  preg_match('#define\(\'DB_PASSWORD\',\s+\'(.*)\'\);#m', $config, $matches['DB_PASSWORD']);
+  preg_match('#define\(\'DB_NAME\',\s+\'(.*)\'\);#m', $config, $matches['DB_NAME']);
+  preg_match('#\$table_prefix\s+=\s+\'(.*)\';#m', $config, $matches['DB_TABLE_PREFIX']);
   
 // Configuration
-  $name = 'Fraktabilligt Generic Bridge';
+  $name = 'Shiplink Generic Bridge';
   $version = '1.0';
   $username = 'foo';
   $password = 'bar';
   $secret_key = '0123456789abcdef0123456789abcdef';
-  $mysql_hostname = DB_HOSTNAME;
-  $mysql_user = DB_USERNAME;
-  $mysql_password = DB_PASSWORD;
-  $mysql_database = DB_DATABASE;
+  $mysql_hostname = $matches['DB_HOST'][1];
+  $mysql_user = $matches['DB_USER'][1];
+  $mysql_password = $matches['DB_PASSWORD'][1];
+  $mysql_database = $matches['DB_NAME'][1];
+  $mysql_table_prefix = $matches['DB_TABLE_PREFIX'][1];
   
 // Set timezone (PHP 5.3+)
   if (!ini_get('date.timezone')) ini_set('date.timezone', 'Europe/Stockholm');
@@ -64,28 +72,45 @@
     case 'list':
       
       $output = array();
+      $delimiter = '/**,**/';
       
       $sql = (
-        "SELECT o.*, c.`iso_code_2` as shipping_country_code FROM ". DB_PREFIX ."order o
-        LEFT JOIN ". DB_PREFIX ."country c ON (o.shipping_country_id = c.country_id)
-        ORDER BY date_added DESC
+        "SELECT
+          p.ID as order_id,
+          p.post_date as order_date,
+          pm.`keys`, 
+          pm.`values`
+        FROM ". $mysqli->real_escape_string($mysql_table_prefix) ."posts p
+        LEFT JOIN (
+          SELECT post_id, group_concat(meta_key SEPARATOR '". $delimiter ."') as `keys`, group_concat(meta_value SEPARATOR '". $delimiter ."') as `values`
+          FROM ". $mysqli->real_escape_string($mysql_table_prefix) ."postmeta
+          GROUP BY post_id
+        ) pm ON (pm.post_id = p.ID)
+        WHERE post_type = 'shop_order'
+        ORDER BY p.post_date DESC
         LIMIT 100;"
       );
       
       if ($result = $mysqli->query($sql) or trigger_error($mysqli->error, E_USER_ERROR)) {
         
         while ($row = $result->fetch_assoc()) {
+          if (count(explode($delimiter, $row['keys'])) != count(explode($delimiter, $row['values']))) {
+            trigger_error('Inconsistent amount of meta titles and values for order '. $row['order_id'], E_USER_WARNING);
+            continue;
+          }
+          
+          $row = array_merge($row, array_combine(explode($delimiter, $row['keys']), explode($delimiter, $row['values'])));
           
           $output[] = array(
             'reference'     => $row['order_id'],
-            'name'          => $row['shipping_company'] ? $row['shipping_company'] : $row['shipping_name'],
-            'destination'   => $row['shipping_country_code'].'-'.$row['shipping_postcode'].' '.$row['shipping_city'],
-            'total_value'   => $row['total'],
-            'currency_code' => $row['currency_code'],
+            'name'          => $row['_shipping_company'] ? $row['_shipping_company'] : $row['_shipping_first_name'].' '.$row['_shipping_last_name'],
+            'destination'   => (!empty($row['_shipping_country']) ? $row['_shipping_country'].'-' : '') . $row['_shipping_postcode'].' '.$row['_shipping_city'],
+            'total_value'   => $row['_order_total'],
+            'currency_code' => $row['_order_currency'],
             'total_weight'  => null,
             'weight_class'  => null,
             'custom'        => '',
-            'date'          => date('Y-m-d H:i:s', strtotime($row['date_added'])),
+            'date'          => date('Y-m-d H:i:s', strtotime($row['order_date'])),
           );
         }
         
@@ -98,17 +123,29 @@
     case 'get':
     
       $output = array();
+      $delimiter = '/**,**/';
       
       $sql = (
-        "SELECT o.*, c.`iso_code_2` as shipping_country_code FROM ". DB_PREFIX ."order o
-        LEFT JOIN ". DB_PREFIX ."country c ON (o.shipping_country_id = c.country_id)
-        WHERE o.order_id = '". $mysqli->real_escape_string($_GET['reference']) ."'
+        "SELECT
+          p.ID as order_id,
+          p.post_date as order_date,
+          pm.`keys`, 
+          pm.`values`
+        FROM ". $mysqli->real_escape_string($mysql_table_prefix) ."posts p
+        LEFT JOIN (
+          SELECT post_id, group_concat(meta_key SEPARATOR '". $delimiter ."') as `keys`, group_concat(meta_value SEPARATOR '". $delimiter ."') as `values`
+          FROM ". $mysqli->real_escape_string($mysql_table_prefix) ."postmeta
+          GROUP BY post_id
+        ) pm ON (pm.post_id = p.ID)
+        WHERE p.ID = '". $mysqli->real_escape_string($_GET['reference']) ."'
+        AND post_type = 'shop_order'
         LIMIT 1"
       );
       
       if ($result = $mysqli->query($sql) or trigger_error($mysqli->error, E_USER_ERROR)) {
         
         while ($row = $result->fetch_assoc()) {
+          $row = array_merge($row, array_combine(explode($delimiter, $row['keys']), explode($delimiter, $row['values'])));
           
           $output = array(
             'reference' => $row['order_id'],
@@ -123,18 +160,18 @@
             //  'phone'        => '...',
             //),
             'consignee' => array(
-              'type'         => !empty($row['shipping_company']) ? 'company' : 'individual',
-              'name'         => !empty($row['shipping_company']) ? $row['shipping_company'] : $row['shipping_firstname'].' '.$row['shipping_lastname'],
-              'address1'     => $row['shipping_address_1'],
-              'city'         => $row['shipping_city'],
-              'postcode'     => $row['shipping_postcode'],
-              'country_code' => $row['shipping_country_code'],
-              'contact'      => $row['shipping_firstname'].' '.$row['shipping_lastname'],
-              'phone'        => $row['telephone'],
+              'type'         => !empty($row['_shipping_company']) ? 'company' : 'individual',
+              'name'         => !empty($row['_shipping_company']) ? $row['_shipping_company'] :  $row['_shipping_first_name'].' '.$row['_shipping_last_name'],
+              'address1'     => $row['_shipping_address1'],
+              'city'         => $row['_shipping_city'],
+              'postcode'     => $row['_shipping_postcode'],
+              'country_code' => $row['_shipping_country'],
+              'contact'      => $row['_shipping_first_name'].' '.$row['_shipping_last_name'],
+              'phone'        => '', // Or use $row['_billing_phone']
             ),
             'consignment' => array(
-              'value' => (float)$row['total'],
-              'currency_code' => $row['currency_code'],
+              'value' => (float)$row['_order_total'],
+              'currency_code' => $row['_order_currency'],
               'shipments' => array(
                 array('weight' => 0, 'weight_class' => 'kg', 'length' => 0, 'width' => 0, 'height' => 0, 'length_class' => 'cm'),
               ),

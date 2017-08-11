@@ -1,18 +1,19 @@
 <?php
-  ini_set('display_errors', 'On'); // For debug use
 
   ob_start();
-
+  
+  include('includes/config.inc.php');
+  
 // Configuration
   $name = 'Shiplink Generic Bridge';
-  $version = '1.0'; // API Version
-  $username = 'foo'; // HTTP Auth Username
-  $password = 'bar'; // HTTP Auth Password
-  $secret_key = '';
-  $mysql_hostname = '';
-  $mysql_user = '';
-  $mysql_password = '';
-  $mysql_database = '';
+  $version = '1.0';
+  $username = 'foo';
+  $password = 'bar';
+  $secret_key = '123456';
+  $mysql_hostname = DB_SERVER;
+  $mysql_user = DB_USERNAME;
+  $mysql_password = DB_PASSWORD;
+  $mysql_database = DB_DATABASE;
 
 // Set timezone (PHP 5.3+)
   if (!ini_get('date.timezone')) ini_set('date.timezone', 'Europe/Stockholm');
@@ -20,7 +21,7 @@
 // Initiate HTTP Auth Digest Protection
   if (empty($_SERVER['PHP_AUTH_DIGEST'])) {
     header('HTTP/1.1 401 Unauthorized');
-    header('WWW-Authenticate: Digest realm="'.$name.'", qop="auth", nonce="'.uniqid().'", opaque="'.md5($name).'"');
+    header('WWW-Authenticate: Digest realm="'. $name .'", qop="auth", nonce="'.uniqid().'", opaque="'.md5($name).'"');
     die('Authorization Required');
   }
 
@@ -32,7 +33,7 @@
     if (strpos(strtolower($_SERVER['HTTP_AUTHORIZATION']), 'digest') === 0) $digest = substr($_SERVER['HTTP_AUTHORIZATION'], 7);
   }
 
-// Parse the digest string
+// Parse the digest_string
   $parameters = array('nonce' => 1, 'nc' => 1, 'cnonce' => 1, 'qop' => 1, 'username' => 1, 'uri' => 1, 'response' => 1);
 
   preg_match_all('@('.implode('|', array_keys($parameters)).')=(?:([\'"])([^\2]+?)\2|([^\s,]+))@', $digest, $matches, PREG_SET_ORDER);
@@ -44,7 +45,7 @@
   }
   $data = $parameters ? false : $data;
 
-// Validate the digest checksum
+// Generate the valid checksum
   $checksum = md5(md5($username.':'.$name.':'.$password).':'.$data['nonce'].':'.$data['nc'].':'.$data['cnonce'].':'.$data['qop'].':'.md5($_SERVER['REQUEST_METHOD'].':'.$data['uri']));
 
   if ($data['response'] != $checksum) {
@@ -65,9 +66,9 @@
       $output = array();
 
       $sql = (
-        "SELECT * FROM tblOrders
-        WHERE order_status_id = 'x'
-        ORDER BY date_created DESC"
+        "SELECT * FROM ". DB_TABLE_ORDERS ."
+        ORDER BY date_created DESC
+        LIMIT 100"
       );
 
       if ($result = $mysqli->query($sql) or trigger_error($mysqli->error, E_USER_ERROR)) {
@@ -75,12 +76,12 @@
         while ($row = $result->fetch_assoc()) {
 
           $output[] = array(
-            'reference'     => $row['order_id'],
-            'name'          => $row['customer_company'] ? $row['customer_company'] : $row['customer_firstname'].' '.$row['customer_lastname'],
-            'destination'   => $row['country_code'].'-'.$row['postcode'].' '.$row['city'],
-            'total_value'   => $row['order_total'],
+            'reference'     => $row['id'],
+            'name'          => $row['shipping_company'] ? $row['shipping_company'] : $row['shipping_firstname'].' '.$row['shipping_lastname'],
+            'destination'   => $row['shipping_country_code'].'-'.$row['shipping_postcode'].' '.$row['shipping_city'],
+            'total_value'   => $row['payment_due'],
             'currency_code' => $row['currency_code'],
-            'total_weight'  => $row['total_weight'],
+            'total_weight'  => $row['weight_total'],
             'weight_class'  => $row['weight_class'],
             'custom'        => '',
             'date'          => date('Y-m-d H:i:s', strtotime($row['date_created'])),
@@ -98,9 +99,8 @@
       $output = array();
 
       $sql = (
-        "SELECT * FROM tblOrders
-        WHERE order_id = '". $mysqli->real_escape_string($_GET['reference']) ."'
-        AND order_status_id = 'x'
+        "SELECT * FROM ". DB_TABLE_ORDERS ."
+        WHERE id = '". $mysqli->real_escape_string($_GET['reference']) ."'
         LIMIT 1"
       );
 
@@ -109,7 +109,7 @@
         while ($row = $result->fetch_assoc()) {
 
           $output = array(
-            'reference' => $row['order_id'],
+            'reference' => $row['id'],
             //'consigner' => array(
             //  'type'         => 'company',
             //  'name'         => '...',
@@ -121,21 +121,20 @@
             //  'phone'        => '...',
             //),
             'consignee' => array(
-              'type'         => !empty($row['company']) ? 'company' : 'individual',
-              'name'         => !empty($row['company']) ? $row['customer_company'] : $row['customer_firstname'].' '.$row['customer_lastname'],
-              'address1'     => $row['customer_address1'],
-              'city'         => $row['customer_city'],
-              'postcode'     => $row['customer_postcode'],
-              'country_code' => $row['customer_country_code'],
-              'contact'      => $row['customer_firstname'].' '.$row['customer_lastname'],
+              'type'         => !empty($row['shipping_company']) ? 'company' : 'individual',
+              'name'         => !empty($row['shipping_company']) ? $row['shipping_company'] : $row['shipping_firstname'].' '.$row['shipping_lastname'],
+              'address1'     => $row['shipping_address1'],
+              'city'         => $row['shipping_city'],
+              'postcode'     => $row['shipping_postcode'],
+              'country_code' => $row['shipping_country_code'],
+              'contact'      => $row['shipping_firstname'].' '.$row['shipping_lastname'],
               'phone'        => $row['customer_phone'],
             ),
             'consignment' => array(
-              'value' => (float)$row['order_total'],
+              'value' => (float)$row['payment_due'],
               'currency_code' => $row['currency_code'],
               'shipments' => array(
                 array('weight' => 0, 'weight_class' => 'kg', 'length' => 0, 'width' => 0, 'height' => 0, 'length_class' => 'cm'),
-                //array('weight' => 0, 'weight_class' => 'kg', 'length' => 0, 'width' => 0, 'height' => 0, 'length_class' => 'cm'),
               ),
             ),
           );
